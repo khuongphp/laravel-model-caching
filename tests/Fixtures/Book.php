@@ -1,11 +1,17 @@
 <?php namespace GeneaLabs\LaravelModelCaching\Tests\Fixtures;
 
-use GeneaLabs\LaravelModelCaching\CachedModel;
+use GeneaLabs\LaravelModelCaching\Traits\Cachable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-class Book extends CachedModel
+class Book extends Model
 {
+    use Cachable;
+
+    protected $casts = [
+        'price' => 'float',
+    ];
     protected $dates = [
         'published_at',
     ];
@@ -13,6 +19,7 @@ class Book extends CachedModel
         'description',
         'published_at',
         'title',
+        'price',
     ];
 
     public function author() : BelongsTo

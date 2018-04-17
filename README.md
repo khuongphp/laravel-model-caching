@@ -14,7 +14,7 @@ I created this package in response to a client project that had complex, nested
 forms with many `<select>`'s that resulted in over 700 database queries on one
 page. I needed a package that abstracted the caching process out of the model
 for me, and one that would let me cache custom queries, as well as cache model
-relationships. This package is the attempt to address those requirements.
+relationships. This package is an attempt to address those requirements.
 
 ## Features
 -   automatic, self-invalidating relationship (both eager- and lazy-loaded) caching.
@@ -24,7 +24,9 @@ relationships. This package is the attempt to address those requirements.
 
 ## Requirements
 -   PHP >= 7.1.3
--   Laravel >=5.5.0
+-   Laravel >= 5.5
+
+[![installation guide cover](https://user-images.githubusercontent.com/1791050/36356190-fc1982b2-14a2-11e8-85ed-06f8e3b57ae8.png)](https://vimeo.com/256318402)
 
 ## Installation
 ```
@@ -32,14 +34,14 @@ composer require genealabs/laravel-model-caching
 ```
 
 ## Configuration
-### Optional Custom Cache Store
+### Recommended (Optional) Custom Cache Store
 If you would like to use a different cache store than the default one used by
 your Laravel application, you may do so by setting the `MODEL_CACHE_STORE`
 environment variable in your `.env` file to the name of a cache store configured
-in `config/cache.php` (you can define any custom cache store base on your
+in `config/cache.php` (you can define any custom cache store based on your
 specific needs there). For example:
 ```
-MODEL_CACHE_STORE=redis
+MODEL_CACHE_STORE=redis2
 ```
 
 ## Usage
@@ -49,7 +51,7 @@ mean that the entire cache is cleared each time a model is created, saved,
 updated, or deleted.
 
 For ease of maintenance, I would recommend adding a `BaseModel` model that
-extends `CachedModel`, from which all your other models are extended. If you
+uses `Cachable`, from which all your other models are extended. If you
 don't want to do that, simply extend your models directly from `CachedModel`.
 
 Here's an example `BaseModel` class:
@@ -57,11 +59,51 @@ Here's an example `BaseModel` class:
 ```php
 <?php namespace App;
 
-use GeneaLabs\LaravelModelCaching\CachedModel;
+use GeneaLabs\LaravelModelCaching\Traits\Cachable;
 
-abstract class BaseModel extends CachedModel
+abstract class BaseModel
 {
+    use Cachable;
     //
+}
+```
+### Multiple Database Connections
+__Thanks to @dtvmedia for suggestion this feature. This is actually a more robust
+solution than cache-prefixes.__
+
+Keeping keys separate for multiple database connections is automatically handled.
+This is especially important for multi-tenant applications, and of course any
+application using multiple database connections.
+
+### Optional Cache Key Prefix
+Thanks to @lucian-dragomir for suggesting this feature! You can use cache key
+prefixing to keep cache entries separate for multi-tenant applications. For this
+it is recommended to add the Cachable trait to a base model, then set the cache
+key prefix config value there.
+
+**Note that the config setting is included before the parent method is called,
+so that the setting is available in the parent as well. If you are developing a
+multi-tenant application, see the note above.**
+
+Here's is an example:
+```php
+<?php namespace GeneaLabs\LaravelModelCaching\Tests\Fixtures;
+
+use GeneaLabs\LaravelModelCaching\Traits\Cachable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+
+class BaseModel extends Model
+{
+    use Cachable;
+
+    public function __construct($attributes = [])
+    {
+        config(['laravel-model-caching.cache-prefix' => 'test-prefix']);
+
+        parent::__construct($attributes);
+    }
 }
 ```
 
@@ -71,20 +113,35 @@ extends `Illuminate\Foundation\Auth\User`. Overriding that would break functiona
 Not only that, but it probably isn't a good idea to cache the user model anyway,
 since you always want to pull the most up-to-date info on it.
 
-### Optional Disabling Caching of Queries
-**Recommendation: add this to all your seeder queries to avoid pulling in
-cached information when reseeding multiple times.**
-You can disable a given query by using `disableCache()` in the query chain, and
-it needs to be placed (anywhere) prior to the query command (`get()`, `all()`,
-`find()`, etc). For example:
+### Experimental: Cache Cool-down In Specific Models
+In some instances, you may want to add a cache invalidation cool-down period.
+For example you might have a busy site where comments are submitted at a high
+rate, and you don't want every comment submission to invalidate the cache. While
+I don't necessarily recommend this, you might experiment it's effectiveness.
+
+It can be implemented like so:
 ```php
-$results = $myModel->disableCache()->all();
+(new Comment)
+    ->withCacheCooldownSeconds(30)
+    ->get();
+```
+
+### Disabling Caching of Queries
+There are two methods by which model-caching can be disabled:
+1. Use `->disableCache()` in a query-by-query instance.
+2. Set `MODEL_CACHE_DISABLED=TRUE` in your `.env` file.
+
+**Recommendation: use option #1 in all your seeder queries to avoid pulling in
+cached information when reseeding multiple times.**
+You can disable a given query by using `disableCache()` anywhere in the query chain. For example:
+```php
+$results = $myModel->disableCache()->where('field', $value)->get();
 ```
 
 ### Manual Flushing of Specific Model
 You can flush the cache of a specific model using the following artisan command:
 ```sh
-php artisan modelCaching:flush --model=App\Model
+php artisan modelCaching:clear --model=App\Model
 ```
 
 This comes in handy when manually making updates to the database. You could also
@@ -99,8 +156,7 @@ In testing this has optimized performance on some pages up to 900%! Most often
 you should see somewhere around 100% performance increase.
 
 ## Commitment to Quality
-During package development I try as best as possible to embrace good design and
-development practices to try to ensure that this package is as good as it can
+During package development I try as best as possible to embrace good design and development practices, to help ensure that this package is as good as it can
 be. My checklist for package development includes:
 
 -   ✅ Achieve as close to 100% code coverage as possible using unit tests.
